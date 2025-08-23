@@ -23,4 +23,4 @@ db.sqlite3
 .DS_Store
 
 # Secrets
-*.env
+.env
