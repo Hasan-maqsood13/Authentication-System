@@ -1,0 +1,8 @@
+<h2>Enter Reset Code</h2>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="email" value="{{ email }}">
+  <input type="text" name="code" placeholder="Enter code" required>
+  <div class="text-danger">{{ error }}</div>
+  <button type="submit">Verify</button>
+</form>

@@ -1,0 +1,11 @@
+<h2>🔒 Session Locked</h2>
+
+{% if error %}
+  <div style="color: red;">{{ error }}</div>
+{% endif %}
+
+<form method="POST">
+  {% csrf_token %}
+  <input type="password" name="password" placeholder="Enter your password" required>
+  <button type="submit">Unlock</button>
+</form>

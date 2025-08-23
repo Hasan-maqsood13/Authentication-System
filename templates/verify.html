@@ -1,0 +1,71 @@
+<!-- templates/verify.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Email Verification</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+  <h3>Verify Your Email</h3>
+  <p>We have sent a code to your email: {{ email }}</p>
+  
+  <form method="POST">
+    {% csrf_token %}
+    <input type="text" name="code" placeholder="Enter the code" required>
+    <button type="submit">Submit</button>
+  </form>
+
+  <p id="timer">You can resend code in <span id="countdown">5</span> seconds</p>
+  <button id="resend" style="display:none;">Resend Code</button>
+  <div id="resend-msg" style="color: green; margin-top: 10px;"></div>
+
+  <script>
+    let seconds = 5;
+    const countdownEl = $('#countdown');
+    const timerEl = $('#timer');
+    const resendBtn = $('#resend');
+    const msgEl = $('#resend-msg');
+
+    const interval = setInterval(function() {
+      seconds--;
+      countdownEl.text(seconds);
+      if (seconds <= 0) {
+        clearInterval(interval);
+        timerEl.hide();
+        resendBtn.show();
+      }
+    }, 1000);
+
+    resendBtn.on('click', function() {
+      $.post("{% url 'verify' %}", {
+        'action': 'resend',
+        'email': "{{ email }}",
+        'csrfmiddlewaretoken': '{{ csrf_token }}'
+      }, function(data) {
+        if (data.success) {
+          msgEl.text('Verification code sent again!');
+          seconds = 5;
+          countdownEl.text(seconds);
+          timerEl.show();
+          resendBtn.hide();
+          // restart countdown
+          setInterval(adaptiveInterval, 1000);
+        } else {
+          msgEl.text('Please try again later.');
+        }
+      });
+    });
+
+    function adaptiveInterval() {
+      seconds--;
+      countdownEl.text(seconds);
+      if (seconds <= 0) {
+        clearInterval(interval);
+        timerEl.hide();
+        resendBtn.show();
+      }
+    }
+  </script>
+</body>
+</html>
