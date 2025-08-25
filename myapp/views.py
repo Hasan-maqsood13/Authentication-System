@@ -2,22 +2,21 @@ from django.core.mail import send_mail
 from django.contrib.auth.hashers import make_password
 import re
 from django.shortcuts import render, redirect
-from .models import Account  
+from .models import Account
 import random
 from django.contrib.auth.hashers import check_password
 from django.http import JsonResponse
 from django.urls import reverse
-import json, re
+import json
+import re
 from django.views.decorators.csrf import csrf_exempt
 
 
-
-
-
-#Create your views here.
+# Create your views here.
 def generate_verification_code(length=8):
     """Generate a random 4-digit numeric code"""
     return str(random.randint(1000, 9999))
+
 
 @csrf_exempt  # Agar CSRF token sahi pass ho raha to zarurat nahi
 def signup(request):
@@ -68,20 +67,21 @@ def signup(request):
         send_mail(
             'Verify Your Email',
             f'Hello {user.name},\n\nThank you for registering!\nYour verification code is: {verification_code}',
-            'your_email@gmail.com',  # apna sender email yahan daalo
+            'hasanmaqsood13@gmail.com',
             [user.email],
             fail_silently=False,
         )
+        request.session['verify_email'] = user.email
 
         # Success me JSON bhejo, email ko frontend redirect ke liye bhej rahe hain
         return JsonResponse({'success': True, 'email': user.email})
 
-    # Agar GET request aayi ho to HTML form render karo
     return render(request, 'signup.html')
+
 
 def verify_code(request):
     error = ''
-    email = request.GET.get('email')
+    email = request.GET.get('email') or request.session.get('verify_email')
 
     if not email:
         return redirect('signup')
@@ -90,12 +90,12 @@ def verify_code(request):
     if not user:
         return redirect('signup')
 
-    # If resend requested
+    # ✅ Resend logic
     if request.method == 'POST' and request.POST.get('action') == 'resend':
-        # Generate and send new code
         new_code = generate_verification_code()
         user.verification_code = new_code
         user.save()
+
         send_mail(
             'Verify Your Email - New Code',
             f'Your new verification code is: {new_code}',
@@ -103,50 +103,76 @@ def verify_code(request):
             [user.email],
             fail_silently=False,
         )
+
         return JsonResponse({'success': True})
 
+    # ✅ Verification via AJAX
     if request.method == 'POST':
         code = request.POST.get('code', '').strip()
+
         if user.verification_code == code:
             user.is_verified = True
-            user.verification_code = ''
             user.save()
+            request.session['verified_success'] = True
+
+            # ✅ If AJAX request, return JSON instead of redirect
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+
             return redirect('login')
         else:
-            error = 'Invalid verification code.'
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': 'Invalid verification code.'})
+            else:
+                error = 'Invalid verification code.'
 
     return render(request, 'verify.html', {'error': error, 'email': email})
 
 
+from django.urls import reverse
 
 def login_view(request):
-    error = ''
-    if request.method == 'POST':
+    if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
         email = request.POST.get('email', '').strip()
         password = request.POST.get('password', '').strip()
+
+        response_data = {'success': False}
+
+        if not email:
+            response_data['error_email'] = 'Email is required.'
+        if not password:
+            response_data['error_password'] = 'Password is required.'
+
+        if 'error_email' in response_data or 'error_password' in response_data:
+            return JsonResponse(response_data)
 
         try:
             user = Account.objects.get(email=email)
 
             if not user.is_verified:
-                error = 'Please verify your email before logging in.'
-            if not check_password(password, user.password):
-                error = 'Incorrect password.'
+                response_data['error_email'] = 'Please verify your email before logging in.'
+            elif not check_password(password, user.password):
+                response_data['error_password'] = 'Incorrect password.'
             else:
-                # ✅ Save user info in session
                 request.session['user_id'] = user.id
                 request.session['locked'] = False
 
-                # ✅ Role-based redirect
-                if user.role == 'admin':
-                    return redirect('admin_dashboard')
-                else:
-                    return redirect('customer_dashboard')
+                # ✅ Use named URLs for proper redirect
+                redirect_url = reverse('admin_dashboard') if user.role == 'admin' else reverse('customer_dashboard')
+
+                response_data['success'] = True
+                response_data['redirect_url'] = redirect_url
+                return JsonResponse(response_data)
 
         except Account.DoesNotExist:
-            error = 'No account found with this email.'
+            response_data['error_email'] = 'No account found with this email.'
 
-    return render(request, 'login.html', {'error': error})
+        return JsonResponse(response_data)
+
+    verified_success = request.session.pop('verified_success', False)
+    return render(request, 'login.html', {'verified_success': verified_success})
+
+
 
 def forgot_password_email(request):
     error = ''
@@ -168,6 +194,7 @@ def forgot_password_email(request):
         except Account.DoesNotExist:
             error = 'No account found with this email.'
     return render(request, 'forgot_password_email.html', {'error': error})
+
 
 def verify_reset_code(request):
     error = ''
@@ -213,8 +240,6 @@ def reset_password(request):
     return render(request, 'reset_password.html', {'error': error, 'email': email})
 
 
-
-
 def admin_dashboard(request):
     user_id = request.session.get('user_id')
     if not user_id:
@@ -228,7 +253,6 @@ def admin_dashboard(request):
         return redirect('customer_dashboard')  # Not allowed
 
     return render(request, 'admin_dashboard.html', {'user': user})
-
 
 
 def customer_dashboard(request):
@@ -249,6 +273,7 @@ def customer_dashboard(request):
 def logout_view(request):
     request.session.flush()  # ❌ Clear session
     return redirect('login')
+
 
 def lock_screen(request):
     user_id = request.session.get('user_id')
@@ -288,5 +313,3 @@ def unlock_screen(request):
             error = "Incorrect password."
 
     return render(request, 'lockscreen.html', {'error': error})
-
-
