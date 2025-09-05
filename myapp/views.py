@@ -129,7 +129,6 @@ def verify_code(request):
     return render(request, 'verify.html', {'error': error, 'email': email})
 
 
-from django.urls import reverse
 
 def login_view(request):
     if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
